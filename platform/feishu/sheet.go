@@ -40,7 +40,7 @@ func (p *Platform) handleSheetCommand(ctx context.Context, rctx replyContext, te
 			p.Reply(ctx, rctx, "Create sheet failed: "+err.Error())
 			return true
 		}
-		shareMsg := grantEditMessage(ctx, client, driveFileTypeSheet, token, userID)
+		shareMsg := grantPermissionMessage(ctx, client, driveFileTypeSheet, token, userID, "full_access")
 		p.Reply(ctx, rctx, fmt.Sprintf("Created sheet: %s\nURL: %s\nToken: %s%s", title, url, token, shareMsg))
 		return true
 
@@ -142,16 +142,32 @@ func (p *Platform) handleSheetCommand(ctx context.Context, rctx replyContext, te
 		return true
 
 	case "grant":
-		if len(fields) < 4 {
-			p.Reply(ctx, rctx, "Usage: /sheet grant <URL/token> <user_open_id>")
+		if len(fields) < 5 {
+			p.Reply(ctx, rctx, "Usage: /sheet grant <URL/token> <user_open_id> <view|edit|full_access>")
 			return true
 		}
 		token := parseFileToken(fields[2])
-		if err := client.GrantEditPermission(ctx, driveFileTypeSheet, token, fields[3]); err != nil {
+		perm := fields[4]
+		if err := client.GrantPermission(ctx, driveFileTypeSheet, token, fields[3], perm); err != nil {
 			p.Reply(ctx, rctx, "Grant permission failed: "+err.Error())
 			return true
 		}
-		p.Reply(ctx, rctx, "Edit permission granted.")
+		p.Reply(ctx, rctx, fmt.Sprintf("%s permission granted.", perm))
+		return true
+
+	case "apply":
+		if len(fields) < 5 {
+			p.Reply(ctx, rctx, "Usage: /sheet apply <URL/token> <view|edit> [remark]")
+			return true
+		}
+		token := parseFileToken(fields[2])
+		perm := fields[3]
+		remark := strings.TrimSpace(strings.TrimPrefix(text, fmt.Sprintf("/sheet apply %s %s", fields[2], fields[3])))
+		if err := client.ApplyPermission(ctx, driveFileTypeSheet, token, perm, remark); err != nil {
+			p.Reply(ctx, rctx, "Apply permission failed: "+err.Error())
+			return true
+		}
+		p.Reply(ctx, rctx, fmt.Sprintf("Applied for %s permission. Wait for owner approval.", perm))
 		return true
 
 	default:
@@ -374,5 +390,6 @@ func sheetHelp() string {
 		"/sheet cells-get <URL/token> <sheet_id> <range>\n" +
 		"/sheet cells-set <URL/token> <sheet_id> <range> <JSON values>\n" +
 		"/sheet delete <URL/token>\n" +
-		"/sheet grant <URL/token> <user_open_id>"
+		"/sheet grant <URL/token> <user_open_id> <view|edit|full_access>\n" +
+		"/sheet apply <URL/token> <view|edit> [remark]"
 }

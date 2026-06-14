@@ -73,30 +73,47 @@ func (d *driveClient) DeleteFile(ctx context.Context, fileType driveFileType, to
 	})
 }
 
-// GrantEditPermission gives the target user edit access to a file.
-func (d *driveClient) GrantEditPermission(ctx context.Context, fileType driveFileType, token, userOpenID string) error {
+// GrantPermission gives the target user a specific permission on a file.
+// perm can be "view", "edit", or "full_access".
+func (d *driveClient) GrantPermission(ctx context.Context, fileType driveFileType, token, userOpenID, perm string) error {
+	if perm == "" {
+		perm = "edit"
+	}
 	req := larkdrive.NewCreatePermissionMemberReqBuilder().
 		Token(token).
 		Type(string(fileType)).
 		BaseMember(larkdrive.NewBaseMemberBuilder().
 			MemberType("openid").
 			MemberId(userOpenID).
-			Perm("edit").
+			Perm(perm).
 			Build()).
 		Build()
 
-	return d.platform.withTransientRetry(ctx, "grant edit permission", func() error {
-		return d.platform.withFreshTenantAccessTokenRetry(ctx, "grant edit permission", func(client *lark.Client, options ...larkcore.RequestOptionFunc) error {
+	return d.platform.withTransientRetry(ctx, "grant permission", func() error {
+		return d.platform.withFreshTenantAccessTokenRetry(ctx, "grant permission", func(client *lark.Client, options ...larkcore.RequestOptionFunc) error {
 			resp, err := client.Drive.PermissionMember.Create(ctx, req, options...)
 			if err != nil {
-				return fmt.Errorf("%s: grant edit permission api: %w", d.platform.tag(), err)
+				return fmt.Errorf("%s: grant permission api: %w", d.platform.tag(), err)
 			}
 			if !resp.Success() {
-				return fmt.Errorf("%s: grant edit permission failed code=%d msg=%s", d.platform.tag(), resp.Code, resp.Msg)
+				return fmt.Errorf("%s: grant permission failed code=%d msg=%s", d.platform.tag(), resp.Code, resp.Msg)
 			}
 			return nil
 		})
 	})
+}
+
+// ApplyPermission requests view or edit permission from the file owner.
+// This endpoint requires user_access_token; bot identity is not supported.
+func (d *driveClient) ApplyPermission(ctx context.Context, fileType driveFileType, token, perm, remark string) error {
+	body := map[string]any{
+		"perm": perm,
+	}
+	if remark != "" {
+		body["remark"] = remark
+	}
+	_, err := d.doDriveRequest(ctx, "POST", fmt.Sprintf("/open-apis/drive/v1/permissions/%s/members/apply?type=%s", token, string(fileType)), body)
+	return err
 }
 
 // fileURL returns a human-readable URL for a file token and type.

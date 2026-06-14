@@ -40,7 +40,7 @@ func (p *Platform) handleDocCommand(ctx context.Context, rctx replyContext, text
 			p.Reply(ctx, rctx, "Create doc failed: "+err.Error())
 			return true
 		}
-		shareMsg := grantEditMessage(ctx, client, driveFileTypeDocx, token, userID)
+		shareMsg := grantPermissionMessage(ctx, client, driveFileTypeDocx, token, userID, "full_access")
 		p.Reply(ctx, rctx, fmt.Sprintf("Created doc: %s\nURL: %s\nToken: %s%s", title, url, token, shareMsg))
 		return true
 
@@ -90,16 +90,32 @@ func (p *Platform) handleDocCommand(ctx context.Context, rctx replyContext, text
 		return true
 
 	case "grant":
-		if len(fields) < 4 {
-			p.Reply(ctx, rctx, "Usage: /doc grant <URL/token> <user_open_id>")
+		if len(fields) < 5 {
+			p.Reply(ctx, rctx, "Usage: /doc grant <URL/token> <user_open_id> <view|edit|full_access>")
 			return true
 		}
 		docToken := parseFileToken(fields[2])
-		if err := client.GrantEditPermission(ctx, driveFileTypeDocx, docToken, fields[3]); err != nil {
+		perm := fields[4]
+		if err := client.GrantPermission(ctx, driveFileTypeDocx, docToken, fields[3], perm); err != nil {
 			p.Reply(ctx, rctx, "Grant permission failed: "+err.Error())
 			return true
 		}
-		p.Reply(ctx, rctx, "Edit permission granted.")
+		p.Reply(ctx, rctx, fmt.Sprintf("%s permission granted.", perm))
+		return true
+
+	case "apply":
+		if len(fields) < 5 {
+			p.Reply(ctx, rctx, "Usage: /doc apply <URL/token> <view|edit> [remark]")
+			return true
+		}
+		docToken := parseFileToken(fields[2])
+		perm := fields[3]
+		remark := strings.TrimSpace(strings.TrimPrefix(text, fmt.Sprintf("/doc apply %s %s", fields[2], fields[3])))
+		if err := client.ApplyPermission(ctx, driveFileTypeDocx, docToken, perm, remark); err != nil {
+			p.Reply(ctx, rctx, "Apply permission failed: "+err.Error())
+			return true
+		}
+		p.Reply(ctx, rctx, fmt.Sprintf("Applied for %s permission. Wait for owner approval.", perm))
 		return true
 
 	default:
@@ -324,18 +340,19 @@ func docHelp() string {
 		"/doc fetch <docx URL/token>\n" +
 		"/doc update <docx URL/token> <content>\n" +
 		"/doc delete <docx URL/token>\n" +
-		"/doc grant <docx URL/token> <user_open_id>"
+		"/doc grant <docx URL/token> <user_open_id> <view|edit|full_access>\n" +
+		"/doc apply <docx URL/token> <view|edit> [remark]"
 }
 
-// grantEditMessage attempts to grant edit permission and returns a human-readable message.
-func grantEditMessage(ctx context.Context, client *driveClient, ft driveFileType, token, userID string) string {
+// grantPermissionMessage attempts to grant permission and returns a human-readable message.
+func grantPermissionMessage(ctx context.Context, client *driveClient, ft driveFileType, token, userID, perm string) string {
 	if userID == "" {
 		return ""
 	}
-	if err := client.GrantEditPermission(ctx, ft, token, userID); err != nil {
-		return fmt.Sprintf("\nNote: failed to grant you edit permission (%s).", err.Error())
+	if err := client.GrantPermission(ctx, ft, token, userID, perm); err != nil {
+		return fmt.Sprintf("\nNote: failed to grant you %s permission (%s).", perm, err.Error())
 	}
-	return "\nYou have been granted edit permission."
+	return fmt.Sprintf("\nYou have been granted %s permission.", perm)
 }
 
 func truncate(s string, max int) string {

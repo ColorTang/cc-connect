@@ -40,7 +40,7 @@ func (p *Platform) handleBaseCommand(ctx context.Context, rctx replyContext, tex
 			p.Reply(ctx, rctx, "Create base failed: "+err.Error())
 			return true
 		}
-		shareMsg := grantEditMessage(ctx, client, driveFileTypeBitable, token, userID)
+		shareMsg := grantPermissionMessage(ctx, client, driveFileTypeBitable, token, userID, "full_access")
 		p.Reply(ctx, rctx, fmt.Sprintf("Created base: %s\nURL: %s\nToken: %s%s", name, url, token, shareMsg))
 		return true
 
@@ -181,16 +181,32 @@ func (p *Platform) handleBaseCommand(ctx context.Context, rctx replyContext, tex
 		return true
 
 	case "grant":
-		if len(fields) < 4 {
-			p.Reply(ctx, rctx, "Usage: /base grant <URL/token> <user_open_id>")
+		if len(fields) < 5 {
+			p.Reply(ctx, rctx, "Usage: /base grant <URL/token> <user_open_id> <view|edit|full_access>")
 			return true
 		}
 		token := parseFileToken(fields[2])
-		if err := client.GrantEditPermission(ctx, driveFileTypeBitable, token, fields[3]); err != nil {
+		perm := fields[4]
+		if err := client.GrantPermission(ctx, driveFileTypeBitable, token, fields[3], perm); err != nil {
 			p.Reply(ctx, rctx, "Grant permission failed: "+err.Error())
 			return true
 		}
-		p.Reply(ctx, rctx, "Edit permission granted.")
+		p.Reply(ctx, rctx, fmt.Sprintf("%s permission granted.", perm))
+		return true
+
+	case "apply":
+		if len(fields) < 5 {
+			p.Reply(ctx, rctx, "Usage: /base apply <URL/token> <view|edit> [remark]")
+			return true
+		}
+		token := parseFileToken(fields[2])
+		perm := fields[3]
+		remark := strings.TrimSpace(strings.TrimPrefix(text, fmt.Sprintf("/base apply %s %s", fields[2], fields[3])))
+		if err := client.ApplyPermission(ctx, driveFileTypeBitable, token, perm, remark); err != nil {
+			p.Reply(ctx, rctx, "Apply permission failed: "+err.Error())
+			return true
+		}
+		p.Reply(ctx, rctx, fmt.Sprintf("Applied for %s permission. Wait for owner approval.", perm))
 		return true
 
 	default:
@@ -397,5 +413,6 @@ func baseHelp() string {
 		"/base record-update <URL/token> <table_id> <record_id> <JSON fields>\n" +
 		"/base record-delete <URL/token> <table_id> <record_id>\n" +
 		"/base delete <URL/token>\n" +
-		"/base grant <URL/token> <user_open_id>"
+		"/base grant <URL/token> <user_open_id> <view|edit|full_access>\n" +
+		"/base apply <URL/token> <view|edit> [remark]"
 }
