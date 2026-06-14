@@ -1189,7 +1189,9 @@ func (p *Platform) dispatchMessage(ctx context.Context, msgType, content string,
 			)
 			return
 		}
-		if p.handleDriveCommand(ctx, rctx, text, userID) {
+		if p.handleDocCommand(ctx, rctx, text, userID) ||
+			p.handleSheetCommand(ctx, rctx, text, userID) ||
+			p.handleBaseCommand(ctx, rctx, text, userID) {
 			return
 		}
 		p.dispatchCoreMessage(&core.Message{
